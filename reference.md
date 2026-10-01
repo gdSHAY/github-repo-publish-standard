@@ -123,7 +123,7 @@ git -c core.autocrlf=false -c core.eol=lf clone <url> _verify
 ## 三补：模板回归测试
 
 `tests/verify_templates.py` 会临时造一个真项目，跑完整链路
-（同步 → `git init` → 反跑一次同步 → 单测 → 复跑单测），再做 4 组反证：
+（同步 → `git init` → 反跑一次同步 → 单测 → 复跑单测），再做 5 组反证：
 
 | 反证 | 期望 |
 | --- | --- |
@@ -131,8 +131,9 @@ git -c core.autocrlf=false -c core.eol=lf clone <url> _verify
 | 向 staging 注入 `ghp_xxx` 假 token | 单测失败，命中通用凭据模式 |
 | README 写不存在的资产名 | 单测失败 |
 | 新工程配 `ignored_top: []` | `.git` 内部空目录确实被删（证明配置真的驱动了行为） |
+| 把本机配置里的真实值抄进 staging | 单测失败，命中**反向扫描**（通用模式抓不到这种「自定义字段名 + 真值」） |
 
-当前结果：**27/27 通过**。改任何模板后必跑。
+当前结果：**29/29 通过**。改任何模板后必跑。
 
 ## 四、这次做的三件「非功能但很值」的事
 

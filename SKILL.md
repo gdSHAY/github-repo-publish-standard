@@ -293,8 +293,9 @@ NOT_SECRET_KEYS = {"proxy"}   # 配置项，本就该出现在前端 placeholder
     `import publish_release` 改成读 `repo_config.json`，去掉了硬依赖）；
     ② 真跳过的项要进 `SKIPPED` 清单并在结尾**显式列出**，不计入通过。
 12. **模板本身要有回归测试** —— `tests/verify_templates.py` 会用真项目现场跑一遍
-    同步 → `git init` → 单测，再做 **4 组反证**（删图片引用 / 注入假 token /
-    资产名写错 / 配置关闭保护）。改任何模板后必须重跑；本轮它抓出了上面第 10 条。
+    同步 → `git init` → 单测，再做 **5 组反证**（删图片引用 / 注入假 token /
+    资产名写错 / 配置关闭保护 / 把本机凭据值抄进仓库）。改任何模板后必须重跑；
+    本轮它抓出了上面第 10、11 条，外加三处只在真实项目上才暴露的假阳性与崩溃。
 
 ---
 
@@ -325,7 +326,7 @@ NOT_SECRET_KEYS = {"proxy"}   # 配置项，本就该出现在前端 placeholder
 | `templates/publish_release.py` | 幂等上传资产到 Releases（默认 dry-run）+ 发布说明同步 |
 | `templates/verify_public.py` | 匿名验证（公开性 / README / 图片字节 / 下载链接 206） |
 | `templates/check_repo.py` | 单测：镜像 / 图片 / 资产名 / 部署残留 / 凭据 / `.git` 行为实测 |
-| `tests/verify_templates.py` | **模板自身的回归测试**（真跑一遍 + 4 组反证），改模板后必跑 |
+| `tests/verify_templates.py` | **模板自身的回归测试**（真跑一遍 + 5 组反证），改模板后必跑 |
 | `CHECKLIST.md` | 交付核对单 |
 | `reference.md` | 落地实例：`gdSHAY/douyin-wm-downloader` 的完整参数与踩坑记录 |
 
@@ -333,5 +334,5 @@ NOT_SECRET_KEYS = {"proxy"}   # 配置项，本就该出现在前端 placeholder
 改参数，再拷需要的脚本到 `.tools/`，改脚本顶部的 `import repo_config` 路径即可。
 `--check` / dry-run 是默认行为，任何写操作都要显式开关。
 
-**改过模板后**：`python tests/verify_templates.py` 必须 27/27 全绿（需要装了
+**改过模板后**：`python tests/verify_templates.py` 必须 29/29 全绿（需要装了
 `requests` 的解释器）。它证明的是「模板本身可用」，与具体项目无关。

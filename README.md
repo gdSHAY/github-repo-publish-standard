@@ -45,7 +45,7 @@
 <div align="center">
 <img src="./docs/verify-run-zh.png" width="820" alt="模板回归测试的真实输出">
 <br>
-<sub>27 项断言 + 4 组反证全部通过。反证的意义是：把保护关掉，测试确实会失败，才证明保护真的在起作用</sub>
+<sub>29 项检查 + 5 组反证全部通过。反证的意义是：把保护关掉，测试确实会失败，才证明保护真的在起作用</sub>
 </div>
 
 ## 📥 获取
@@ -150,7 +150,7 @@ templates/
   README.zh.template.md     中文门面骨架
   README.en.template.md     英文门面骨架
 tests/
-  verify_templates.py       模板自身回归测试（真跑一遍 + 4 组反证）
+  verify_templates.py       模板自身回归测试（真跑一遍 + 5 组反证）
 docs/                       README 配图
 ```
 
@@ -175,7 +175,7 @@ docs/                       README 配图
 python tests/verify_templates.py
 ```
 
-它会临时造一个真项目，跑完整链路（同步 → `git init` → 二次同步 → 自检 → 复跑自检），再做 4 组反证：删掉英文版图片引用、注入假 token、写错资产名、把保护配置关掉 —— 每一组都**必须让自检失败**。当前 27/27 通过。
+它会临时造一个真项目，跑完整链路（同步 → `git init` → 二次同步 → 自检 → 复跑自检），再做 5 组反证：删掉英文版图片引用、注入假 token、写错资产名、把保护配置关掉、把本机凭据值抄进仓库 —— 每一组都**必须让自检失败**。当前 29/29 通过。
 </details>
 
 <details>

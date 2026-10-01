@@ -45,7 +45,7 @@ The standard has to survive its own scrutiny. The image below is a capture of an
 <div align="center">
 <img src="./docs/verify-run-zh.png" width="820" alt="Real output of the template regression test">
 <br>
-<sub>27 assertions plus 4 counter-proofs, all passing. The point of a counter-proof: disable the protection and the test really does fail — only then is the protection proven to work</sub>
+<sub>29 checks plus 5 counter-proofs, all passing. The point of a counter-proof: disable the protection and the test really does fail — only then is the protection proven to work</sub>
 </div>
 
 ## 📥 Get it
@@ -150,7 +150,7 @@ templates/
   README.zh.template.md     Chinese facade skeleton
   README.en.template.md     English facade skeleton
 tests/
-  verify_templates.py       Regression test for the templates (real run + 4 counter-proofs)
+  verify_templates.py       Regression test for the templates (real run + 5 counter-proofs)
 docs/                       README images
 ```
 
@@ -175,7 +175,7 @@ Because what readers most want to know is **what it cannot do**. Stating the res
 python tests/verify_templates.py
 ```
 
-It builds a throwaway project, runs the whole chain (sync, `git init`, sync again, self-check, self-check again), then applies 4 counter-proofs: remove the English image reference, inject a fake token, state a wrong asset name, and turn the protection off. Each one **must make the self-check fail**. Currently 27/27 pass.
+It builds a throwaway project, runs the whole chain (sync, `git init`, sync again, self-check, self-check again), then applies 5 counter-proofs: remove the English image reference, inject a fake token, state a wrong asset name, turn the protection off, and copy a real local credential value into the repo. Each one **must make the self-check fail**. Currently 29/29 pass.
 </details>
 
 <details>

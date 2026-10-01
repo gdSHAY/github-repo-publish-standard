@@ -7,12 +7,21 @@
 检查项
 ------
 1. 仓库已公开          GET /repos/{o}/{r} → private=false
-2. README 双语可读      raw.githubusercontent.com/.../README.md → 200，
-                       且正文里含指向另一语言的相对链接
-3. 截图可访问          每张 docs/*.png → 200，且**字节数与本地一致**
+2. README 双语可读     两份 README 都取得到，且正文里含指向另一语言的相对链接
+3. 截图可访问          每张 docs/*.png 取得到，且**字节数与本地一致**
                        （只看到 200 不算 —— 传上去一张旧的也可能 200）
-4. 真实下载链接        github.com/{o}/{r}/releases/download/{tag}/{asset}
-                       → **206**（Range 请求），且前 4KB 与本地一致
+4. 真实下载链接        releases/download/{tag}/{asset} 取得到，且前 4KB 与本地一致
+
+双通道
+------
+`raw.githubusercontent.com` 与 `github.com` 的可达性跟 `api.github.com` **常常不一致**
+（本机实测过：api 通、raw 超时）。所以每个资源都准备两条路：
+
+    raw 通道      raw.githubusercontent.com/...            （首选，最接近真实读者体验）
+    API 兜底      GET /repos/{o}/{r}/contents/<path>
+                  Accept: application/vnd.github.raw+json （仍然是匿名请求）
+
+最终报告会写明每一项实际走的是哪条通道 —— 「验证通过」必须能说清是怎么通过的。
 
 用法
 ----
@@ -34,6 +43,7 @@ RAW = "https://raw.githubusercontent.com"
 
 READY = "OK  "
 FAIL = "FAIL"
+SKIPPED = []
 
 
 def session() -> requests.Session:
@@ -44,8 +54,33 @@ def session() -> requests.Session:
     return s
 
 
+def fetch_any(s: requests.Session, candidates: list) -> tuple:
+    """依次尝试 [(url, headers), ...]，返回 (status, content, url, errors)。
+
+    只有 5xx 与网络异常才继续往下试；4xx 是**明确的答案**（比如 404），直接返回。
+
+    ⚠️ 超时必须**短**（连接 10s / 读 30s）。本机实测 raw 通道会整段假死，
+    给 90s 会让「验证」变成一次几分钟的挂起 —— 而挂起比失败更难判断。
+    """
+    errors = []
+    for url, headers in candidates:
+        try:
+            r = s.get(url, headers=headers or None, timeout=(10, 30))
+            if r.status_code < 500:
+                return r.status_code, r.content, url, None
+            errors.append("%s -> HTTP %s" % (url, r.status_code))
+        except requests.RequestException as exc:
+            errors.append("%s -> %s" % (url, type(exc).__name__))
+    return None, b"", "", "；".join(errors)
+
+
+def _channel(url: str) -> str:
+    return "api" if "api.github.com" in (url or "") else "raw"
+
+
+# ---------------------------------------------------------------------------
 def check_public(s: requests.Session) -> bool:
-    r = s.get("%s/repos/%s/%s" % (API, OWNER, REPO), timeout=30)
+    r = s.get("%s/repos/%s/%s" % (API, OWNER, REPO), timeout=(8, 20))
     if r.status_code != 200:
         print("%s 仓库不可匿名访问：HTTP %s" % (FAIL, r.status_code))
         return False
@@ -57,23 +92,30 @@ def check_public(s: requests.Session) -> bool:
     return ok
 
 
+def _file_candidates(rel_path: str, accept: str) -> list:
+    return [
+        ("%s/%s/%s/%s/%s" % (RAW, OWNER, REPO, DEFAULT_BRANCH, rel_path), None),
+        ("%s/repos/%s/%s/contents/%s" % (API, OWNER, REPO, rel_path), {"Accept": accept}),
+    ]
+
+
 def check_readme(s: requests.Session) -> bool:
     readme = CFG["readme"]
     pairs = [(readme["zh_target"], readme["en_target"]),
              (readme["en_target"], readme["zh_target"])]
     ok = True
     for name, counterpart in pairs:
-        url = "%s/%s/%s/%s/%s" % (RAW, OWNER, REPO, DEFAULT_BRANCH, name)
-        r = s.get(url, timeout=60)
-        if r.status_code != 200:
-            print("%s %s → HTTP %s" % (FAIL, name, r.status_code))
+        status, content, url, err = fetch_any(
+            s, _file_candidates(name, "application/vnd.github.raw+json"))
+        if status != 200:
+            print("%s %s → 取不到（%s）" % (FAIL, name, err or "HTTP %s" % status))
             ok = False
             continue
-        text = r.text
+        text = content.decode("utf-8", errors="replace")
         has_link = ("./%s" % counterpart) in text
-        print("%s %s → 200，%d 字节，切换链接%s"
-              % (READY if has_link else FAIL, name, len(r.content),
-                 "存在" if has_link else "**缺失**"))
+        print("%s %s → 200，%d 字节，切换链接%s（通道 %s）"
+              % (READY if has_link else FAIL, name, len(content),
+                 "存在" if has_link else "**缺失**", _channel(url)))
         ok = ok and has_link
     return ok
 
@@ -81,53 +123,77 @@ def check_readme(s: requests.Session) -> bool:
 def check_images(s: requests.Session) -> bool:
     images = CFG["verify"].get("images") or []
     if not images:
-        print("-- 未配置 verify.images，跳过图片校验")
+        SKIPPED.append("截图校验（verify.images 未配置）")
+        print("-- 跳过：截图校验（verify.images 未配置）")
         return True
     ok = True
     for rel in images:
         local = os.path.join(PROJECT, rel)
-        url = "%s/%s/%s/%s/%s" % (RAW, OWNER, REPO, DEFAULT_BRANCH, rel)
-        r = s.get(url, timeout=60)
-        if r.status_code != 200:
-            print("%s %s → HTTP %s" % (FAIL, rel, r.status_code))
+        status, content, url, err = fetch_any(
+            s, _file_candidates(rel, "application/vnd.github.raw+json"))
+        if status != 200:
+            print("%s %s → 取不到（%s）" % (FAIL, rel, err or "HTTP %s" % status))
             ok = False
             continue
         if not os.path.isfile(local):
             print("-- %s → 200（本地无同名文件，跳过字节比对）" % rel)
             continue
         local_size = os.path.getsize(local)
-        same = len(r.content) == local_size
-        print("%s %s → 200，远端 %d / 本地 %d 字节%s"
-              % (READY if same else FAIL, rel, len(r.content), local_size,
-                 "" if same else "  ← 不一致（是不是没同步？）"))
+        same = len(content) == local_size
+        print("%s %s → 200，远端 %d / 本地 %d 字节%s（通道 %s）"
+              % (READY if same else FAIL, rel, len(content), local_size,
+                 "" if same else "  ← 不一致（是不是没同步？）", _channel(url)))
         ok = ok and same
     return ok
 
 
 def check_release_assets(s: requests.Session) -> bool:
-    rel = CFG["release"]
+    rel = CFG.get("release") or {}
+    assets = rel.get("assets") or []
+    if not assets:
+        SKIPPED.append("下载链接校验（release.assets 为空）")
+        print("-- 跳过：下载链接校验（配置里没有 Release 资产）")
+        return True
+
     tag = rel["tag"]
+    # 先拿一次资产清单，供 API 兜底用（匿名请求，公开仓库可读）
+    by_name = {}
+    try:
+        r = s.get("%s/repos/%s/%s/releases/tags/%s" % (API, OWNER, REPO, tag),
+                  timeout=(8, 20))
+        if r.status_code == 200:
+            for item in r.json().get("assets") or []:
+                by_name[item["name"]] = item["id"]
+    except requests.RequestException:
+        pass
+
     ok = True
-    for item in rel.get("assets") or []:
+    for item in assets:
         name = item["name"]
         local = item["path"]
         if not os.path.isabs(local):
             local = os.path.join(PROJECT, local)
-        url = "https://github.com/%s/%s/releases/download/%s/%s" % (OWNER, REPO, tag, name)
-        try:
-            r = s.get(url, headers={"Range": "bytes=0-4095"}, timeout=120)
-        except Exception as exc:
-            print("%s %s → 请求失败：%s" % (FAIL, name, exc))
+
+        cands = [("https://github.com/%s/%s/releases/download/%s/%s" % (OWNER, REPO, tag, name),
+                  {"Range": "bytes=0-4095"})]
+        if name in by_name:
+            cands.append(("%s/repos/%s/%s/releases/assets/%s"
+                          % (API, OWNER, REPO, by_name[name]),
+                          {"Accept": "application/octet-stream",
+                           "Range": "bytes=0-4095"}))
+
+        status, content, url, err = fetch_any(s, cands)
+        if status is None:
+            print("%s %s → 两条通道都不通（%s）" % (FAIL, name, err))
             ok = False
             continue
-        # 真实链接会 302 到 release-assets.githubusercontent.com，requests 自动跟随；
-        # 206 = 服务端接受了 Range，比 200 更能证明是同一个文件。
-        good = r.status_code in (200, 206) and len(r.content) > 0
-        detail = "HTTP %s，前 %d 字节" % (r.status_code, len(r.content))
+        # 206 = 服务端接受了 Range，比 200 更能证明是同一个文件
+        good = status in (200, 206) and len(content) > 0
+        detail = "HTTP %s，前 %d 字节（通道 %s）" % (status, len(content), _channel(url))
         if good and os.path.isfile(local):
             with open(local, "rb") as handle:
-                head = handle.read(len(r.content))
-            if head == r.content:
+                head = handle.read(len(content))
+            if head == content:
                 detail += "，与本地一致"
             else:
                 detail += "，**与本地不一致**"
@@ -141,7 +207,7 @@ def check_release_assets(s: requests.Session) -> bool:
 
 def main() -> int:
     print("匿名验证 %s/%s（不带 Authorization）" % (OWNER, REPO))
-    print("-" * 60)
+    print("-" * 66)
     s = session()
 
     results = {
@@ -151,16 +217,21 @@ def main() -> int:
         "下载链接": check_release_assets(s),
     }
 
-    print("-" * 60)
+    print("-" * 66)
     for label, ok in results.items():
         print("%s %s" % (READY if ok else FAIL, label))
+    if SKIPPED:
+        print()
+        print("跳过 %d 项（不算通过）：" % len(SKIPPED))
+        for name in SKIPPED:
+            print("   -", name)
     bad = [k for k, v in results.items() if not v]
     if bad:
         print()
         print("未通过：%s" % "、".join(bad))
         return 1
     print()
-    print("全部通过 —— 任何人都可以打开链接、看到 README、下载到二进制。")
+    print("全部通过 —— 任何人都可以打开链接、看到 README、拿到文件。")
     return 0
 
 
