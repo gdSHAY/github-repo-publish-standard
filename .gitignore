@@ -1,0 +1,11 @@
+# Python 中间产物
+__pycache__/
+*.py[cod]
+*.pyo
+
+# 运行期
+*.log
+.venv/
+venv/
+.env
+.DS_Store

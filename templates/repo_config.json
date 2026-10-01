@@ -1,0 +1,91 @@
+{
+  "_readme": "把本文件放到目标工程的 .tools/repo_config.json，然后按实际情况改。所有模板脚本都只读这一份配置，不再各自写死仓库名。",
+
+  "owner": "gdSHAY",
+  "repo": "douyin-wm-downloader",
+  "default_branch": "main",
+  "default_language": "zh",
+
+  "_staging_dir": "本机工程 -> 这个目录 -> git 工作区。见 SKILL.md §2。",
+  "staging_dir": "发布仓库",
+
+  "readme": {
+    "_note": "源是本机门面文件（可含长文），目标是仓库里的 README。中文默认就让 zh_target=README.md。",
+    "zh_source": "项目主页.md",
+    "en_source": "项目主页.en.md",
+    "zh_target": "README.md",
+    "en_target": "README.en.md"
+  },
+
+  "_include": "要进仓库的文件。字符串=原样拷贝；对象可重命名；支持 * 通配（相对工程根）。",
+  "include": [
+    "server.py",
+    "bili_parser.py",
+    "dash_muxer.py",
+    "disk_saver.py",
+    "douyin_abogus.py",
+    "douyin_hd.py",
+    "douyin_parser.py",
+    "runtime_paths.py",
+    "tiktok_parser.py",
+    "xhs_parser.py",
+    "requirements.txt",
+    "使用说明.txt",
+    { "src": "static/index.html", "dst": "static/index.html" },
+    { "src": "docs/*.png", "dst": "docs/*.png" }
+  ],
+
+  "_never_publish": "写在这里只是文档化 + 供 check_repo.py 断言之用；真正的排除靠「不写进 include」。",
+  "never_publish": [
+    "data/",
+    "bili_config.json",
+    "tiktok_config.json",
+    ".tools/",
+    "dist/",
+    "build/",
+    "安卓APK/",
+    "水印对比验证/",
+    "__pycache__/"
+  ],
+
+  "_obsolete": "曾经发布过、现在要下架的文件。同步时从 staging 里删除，push 后即从仓库消失。",
+  "obsolete": [
+    "Procfile",
+    "Dockerfile",
+    ".dockerignore",
+    "render.yaml",
+    ".github/workflows/docker-check.yml"
+  ],
+
+  "_ignored_top": "staging 里不参与同步与空目录清理的顶层目录（版本控制元数据）。见 SKILL.md §6.2。",
+  "ignored_top": [".git"],
+
+  "_generate": "staging 专属、源工程没有对应文件的内容。注意与工程根的 .gitignore 职责不同。",
+  "generate": {
+    ".gitignore": "# 运行期数据 —— 可能含登录凭据，绝不能进仓库\ndata/\n*_config.json\n*.log\n\n# Python 中间产物\n__pycache__/\n*.py[cod]\n*.pyo\n\n# 本地环境\n.venv/\nvenv/\n.env\n.DS_Store\n"
+  },
+
+  "release": {
+    "tag": "v1.0.7",
+    "name": "v1.0.7",
+    "_body_file": "发布说明正文的源文件；脚本读它，改本地即生效。留空则用脚本内联 BODY。",
+    "body_file": ".tools/release_body.md",
+    "draft": false,
+    "prerelease": false,
+    "assets": [
+      { "path": "安卓APK/multipldl-1.0.7-arm64-v8a-debug.apk", "name": "multipldl-1.0.7-arm64-v8a-debug.apk" },
+      { "path": "dist/多平台无水印下载站.zip", "name": "multipldl-1.0.7-win64.zip" }
+    ]
+  },
+
+  "verify": {
+    "_note": "匿名验证的检查项。required_sections 用来守住「能力边界 / 合规」这类不可删章节。",
+    "images": [
+      "docs/screenshot-home-zh.png",
+      "docs/screenshot-result-zh.png",
+      "docs/watermark-compare.png"
+    ],
+    "required_sections_zh": ["## 📥", "## ⚠️", "## 📄"],
+    "required_sections_en": ["## ", "## "]
+  }
+}
