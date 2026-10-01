@@ -146,17 +146,42 @@ git -c core.autocrlf=false -c core.eol=lf clone <url> _verify
 3. **两条推送路径互证** —— `git push` 之后跑 API 脚本 dry-run 显示「未变 19」，
    等于让两套独立实现互相校验，比任何单一自检都可靠。
 
-## 五、复用清单
+## 五、第二个实例：本技能自己（`gdSHAY/github-repo-publish-standard`）
+
+规范发布自己时，又踩到三处**只在真实项目上才暴露**的问题 —— 记下来，这类问题单看模板看不出来：
+
+| 问题 | 表象 | 根因 | 修法 |
+| --- | --- | --- | --- |
+| 子串黑名单误伤 | `templates/repo_config.json` 被判成「凭据残留」 | 黑名单里有 `_config.json` 这个**子串** | 改成配置驱动：拿 `never_publish` 的条目比对路径分段 |
+| 检查器崩溃 | 扫到 `docs/*.png` 抛 `UnicodeDecodeError`，整脚本挂掉 | `read()` 只捕了 `OSError` | 同时捕 `UnicodeDecodeError`；崩掉的检查器会被误读成「没报错 = 通过」 |
+| 反向扫描假阳性 | `owner` / `repo` / 图片路径全被当成「凭据泄漏」 | 保守策略「≥16 字符的未知键一律当秘密」把配置里的公开值也吞了 | 形状过滤（含 `/`、`\`、`://` 的不是凭据）+ 公开值白名单（`owner`/`repo`/路径类键） |
+
+另外两处是**结构**问题：
+
+- **镜像检查不该比对全部图片** —— 徽章按语言不同是合理的（中文版写
+  `形态-智能体技能`、英文版写 `Form-Agent%20Skill`），URL 必然不同。
+  改为：仓库内图片必须**逐字一致**，外链只比对**数量**。
+- **staging 不能嵌在会被扫描的目录里** —— `发布仓库/` 里有一份完整的 SKILL.md。
+  技能按「一级目录 + SKILL.md」枚举，嵌套副本不会被枚举，所以当场没有症状；
+  但这是靠约定而非结构保证的。已把工作区移到技能树之外
+  （`~/.workbuddy/skill-repos/<repo>/`，配置里用绝对路径）。
+
+`repo_config.json` 的 `staging_dir` 因此改为**显式支持绝对路径** —— 不再依赖
+`os.path.join` 遇到绝对路径原样返回这个副作用。
+
+## 六、复用清单
 
 拷到新项目时按顺序做：
 
-1. `curl` 或复制 `templates/repo_config.json` → 新工程 `.tools/repo_config.json`，改 owner/repo/include/release。
+1. 复制 `templates/repo_config.json` → 新工程 `.tools/repo_config.json`，改 owner/repo/include/release。
 2. 复制 `_repo_config.py`、`sync_staging.py`、`publish_release.py`、`verify_public.py`、`check_repo.py` 到 `.tools/`。
 3. 复制 `README.zh.template.md` / `README.en.template.md` → 工程根的 `项目主页.md` / `项目主页.en.md`，填内容。
 4. 复制 `make_readme_assets.py` → `.tools/`，改顶部 `SEL_*` / `SAMPLE_INPUT` / 端口。
 5. `python .tools/sync_staging.py` → `cd 发布仓库 && git init && git remote add origin ... && git push`。
-6. `python .tools/publish_release.py --push`。
+6. `python .tools/publish_release.py --push`（**没有二进制产物就跳过** —— 纯文本仓库不需要 Release）。
 7. `python .tools/verify_public.py` —— 全绿才算发完。
 8. 跑 `python 仓库单测.py`，然后用 `CHECKLIST.md` 逐条打勾。
 
-> `github.com` 不可达时改用 Git Data API 推送 —— 见技能 `github-api-fallback`。
+> `github.com` / `raw.githubusercontent.com` 不可达时：`verify_public.py` 会自动退到
+> `api.github.com` 的 contents 接口（仍然匿名，报告里会写明走的哪条通道）；
+> 推送则改用 Git Data API —— 见技能 `github-api-fallback`。

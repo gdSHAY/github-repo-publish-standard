@@ -39,7 +39,20 @@ CFG = load()
 OWNER = CFG["owner"]
 REPO = CFG["repo"]
 DEFAULT_BRANCH = CFG.get("default_branch", "main")
-STAGING = os.path.join(PROJECT, CFG["staging_dir"])
+def _staging_path(value: str) -> str:
+    """staging 目录。
+
+    支持**绝对路径** —— `os.path.join` 遇到绝对路径会原样返回，
+    但那是 Python 的副作用而非明确意图，所以在这里写清楚：
+    工程本身会被工具扫描时（技能 / 插件 / 会被自动发现的项目），
+    staging 里那份完整的 SKILL.md 副本会造成同名歧义，**必须放到工程之外**。
+    """
+    if os.path.isabs(value):
+        return os.path.normpath(value)
+    return os.path.join(PROJECT, value)
+
+
+STAGING = _staging_path(CFG["staging_dir"])
 
 # ⚠️ 不能写成 `CFG.get("ignored_top") or [".git"]` ——
 # 空列表是 falsy，会把「显式配置成空」误判成「未配置」，导致保护关不掉。
